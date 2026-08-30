@@ -91,6 +91,67 @@ Arbeitsspeicher — beim Schließen ist alles weg. Als Nächstes:
 
 Die Platzhalter im Code sind mit Kommentaren markiert.
 
+## Die App als echte App bauen (EAS)
+
+Expo Go zeigt die App, ist aber nicht die App — es ist eine Hülle, die deinen
+Code lädt. Für TestFlight und den App Store brauchst du einen echten Build.
+Den baut Expo in der Cloud (EAS), ein Mac ist auch dafür nicht nötig.
+
+Einmalig einrichten:
+
+```bash
+npm install --global eas-cli
+eas login
+eas init
+```
+
+`eas init` verknüpft den Ordner mit einem Projekt in deinem Expo-Konto und
+trägt eine Projekt-ID in `app.json` ein. Diese Änderung gehört committet.
+
+### Android zum Ausprobieren — kostet nichts
+
+```bash
+eas build --platform android --profile preview
+```
+
+Ergebnis ist eine `.apk`-Datei zum Download. Die lässt sich direkt auf einem
+Android-Handy installieren. Kein Entwicklerkonto, keine Gebühr. Der günstigste
+Weg, die App als echte App in der Hand zu halten.
+
+### iOS für TestFlight — braucht ein Apple-Entwicklerkonto
+
+```bash
+eas build --platform ios --profile production
+eas submit --platform ios --latest
+```
+
+Voraussetzung ist die Mitgliedschaft im Apple Developer Program (99 USD pro
+Jahr). Ohne sie lässt sich kein iOS-Build signieren und nichts an TestFlight
+übergeben.
+
+### Wenn du Code geändert hast
+
+Nach jeder Änderung an `app.json`, an den Abhängigkeiten oder an nativen
+Einstellungen ist ein neuer Build nötig. Reine Änderungen an Bildschirmen und
+Texten lassen sich auch ohne neuen Build ausliefern:
+
+```bash
+eas update --branch preview
+```
+
+## Was das kostet
+
+| Posten | Kosten |
+|---|---|
+| Expo Go zum Entwickeln | kostenlos |
+| EAS Build, freier Tarif | kostenlos, 15 iOS- und 15 Android-Builds pro Monat |
+| Apple Developer Program | 99 USD pro Jahr, Pflicht für TestFlight und App Store |
+| Google Play Console | 25 USD einmalig, nur für den Play Store nötig |
+
+Der freie EAS-Tarif reicht am Anfang. Ist das Kontingent aufgebraucht, geht es
+erst im nächsten Kalendermonat weiter. Prüfe die Preise vor dem Buchen selbst
+nach — sie ändern sich.
+
 ## Wichtig vor der Einreichung im App Store
 
 - Die Kontaktadresse in `src/app/(tabs)/profil.tsx` durch die echte ersetzen.
