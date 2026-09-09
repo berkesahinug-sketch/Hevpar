@@ -84,6 +84,23 @@ export default function ProfilScreen() {
         )}
       </View>
 
+      <View style={styles.abschnitt}>
+        <Eyebrow>Deine Antworten</Eyebrow>
+        {profil.antworten.length > 0 ? (
+          profil.antworten.map((a) => (
+            <View key={a.frage} style={styles.antwort}>
+              <Eyebrow>{a.frage}</Eyebrow>
+              <Text style={styles.antwortText}>{a.antwort}</Text>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.hinweis}>
+            Noch keine Antworten. Auf sie kommen die Silavs — ohne Antworten bleibt dein Profil
+            stumm.
+          </Text>
+        )}
+      </View>
+
       <View style={styles.trenner}>
         <Kilim height={10} color={C.line} opacity={1} />
       </View>
@@ -177,6 +194,16 @@ const styles = StyleSheet.create({
   hinweis: { fontFamily: F.sans, fontSize: 12.5, lineHeight: 20, color: C.muted },
 
   trenner: { marginTop: S.xl },
+  antwort: {
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: S.md,
+    marginBottom: 8,
+  },
+  antwortText: { fontFamily: F.serif, fontSize: 15.5, lineHeight: 22, color: C.ink },
 
   aktion: { paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: C.line, marginTop: 2 },
   aktionText: { fontFamily: F.sans, fontSize: 14, color: C.ink },

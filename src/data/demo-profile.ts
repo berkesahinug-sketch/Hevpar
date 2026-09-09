@@ -96,7 +96,63 @@ export const DEMO_PROFILE: Profil[] = [
       { frage: 'Bei mir geht gar nicht', antwort: 'Wenn du sagst, das sei doch alles dasselbe.' },
     ],
   },
+  {
+    id: 'shvan',
+    name: 'Şivan',
+    alter: 33,
+    stadt: 'Paris',
+    verifiziert: true,
+    chips: ['Kelhurî', 'Kirmaşan', 'Paris', 'Zwischen zwei Welten zuhause'],
+    prompts: [
+      {
+        frage: 'Devoka min',
+        antwort: 'Kelhurî, das hier keiner kennt. Ich erkläre es immer als Musik, nicht als Sprache.',
+      },
+      {
+        frage: 'Mein Sonntag',
+        antwort: 'Canal Saint-Martin mit Thermoskanne. Der Tee ist von zuhause, der Rest ist Paris.',
+      },
+      {
+        frage: 'Ehrlich gesagt',
+        antwort: 'Ich rufe meine Mutter öfter an, als ich zugebe. Sie legt trotzdem zuerst auf.',
+      },
+    ],
+  },
+  {
+    id: 'nazdar',
+    name: 'Nazdar',
+    alter: 28,
+    stadt: 'Amsterdam',
+    verifiziert: true,
+    chips: ['Hewramî', 'Hewraman', 'Amsterdam', 'Politisch aktiv'],
+    prompts: [
+      {
+        frage: 'Devoka min',
+        antwort: 'Hewramî. Wenn ich es spreche, werden alte Leute weich und junge neugierig.',
+      },
+      {
+        frage: 'Was ich weitergeben will',
+        antwort: 'Die Geduld, ein Lied dreimal zu hören, bevor man sagt, man versteht es.',
+      },
+      {
+        frage: 'Ein Ort, den ich dir zeigen würde',
+        antwort: 'Die Terrassenfelder bei Hewraman im Mai. Bis dahin: der Markt am Albert Cuyp.',
+      },
+    ],
+  },
 ];
 
 /** Filter-Chips über der Entdecken-Liste. */
-export const FILTER = ['Kurmancî', 'Soranî', 'Zazakî', 'Berlin', 'Stockholm', 'London', 'Brüssel'];
+export const FILTER = [
+  'Kurmancî',
+  'Soranî',
+  'Zazakî',
+  'Kelhurî',
+  'Hewramî',
+  'Berlin',
+  'Stockholm',
+  'London',
+  'Brüssel',
+  'Paris',
+  'Amsterdam',
+];

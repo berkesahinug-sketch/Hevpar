@@ -1,7 +1,30 @@
-import type { ReactNode } from 'react';
-import { Pressable, Text, View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { useRef, type ReactNode } from 'react';
+import {
+  Animated,
+  Pressable,
+  Text,
+  View,
+  StyleSheet,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 
+import { tick } from '@/lib/haptik';
 import { C, F, RADIUS } from '@/theme/tokens';
+
+/**
+ * Feder-Effekt beim Drücken: Das Element gibt kurz nach und schnellt zurück.
+ * Kleine Bewegung, große Wirkung – die App fühlt sich an, als reagiere sie
+ * körperlich, nicht nur logisch.
+ */
+function useDruckFeder() {
+  const groesse = useRef(new Animated.Value(1)).current;
+  const rein = () =>
+    Animated.spring(groesse, { toValue: 0.94, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
+  const raus = () =>
+    Animated.spring(groesse, { toValue: 1, useNativeDriver: true, speed: 22, bounciness: 10 }).start();
+  return { groesse, rein, raus };
+}
 
 /* ---------------------------------- Chip ---------------------------------- */
 
@@ -26,21 +49,30 @@ export function Chip({ label, active, onPress, tone = 'default', small, disabled
   const foreground = quiet ? C.forest : active ? C.card : C.ink;
   const border = quiet ? 'transparent' : active ? C.forest : C.line;
 
+  const feder = useDruckFeder();
+
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => {
+        tick();
+        onPress?.();
+      }}
+      onPressIn={feder.rein}
+      onPressOut={feder.raus}
       disabled={disabled || !onPress}
       accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityState={onPress ? { selected: !!active, disabled: !!disabled } : undefined}
-      style={({ pressed }) => [
-        styles.chip,
-        small && styles.chipSmall,
-        { backgroundColor: background, borderColor: border },
-        pressed && onPress ? styles.pressed : null,
-      ]}>
-      <Text style={[styles.chipLabel, small && styles.chipLabelSmall, { color: foreground }]}>
-        {label}
-      </Text>
+      accessibilityState={onPress ? { selected: !!active, disabled: !!disabled } : undefined}>
+      <Animated.View
+        style={[
+          styles.chip,
+          small && styles.chipSmall,
+          { backgroundColor: background, borderColor: border },
+          { transform: [{ scale: feder.groesse }] },
+        ]}>
+        <Text style={[styles.chipLabel, small && styles.chipLabelSmall, { color: foreground }]}>
+          {label}
+        </Text>
+      </Animated.View>
     </Pressable>
   );
 }
@@ -64,21 +96,26 @@ export function Button({ label, onPress, variant = 'solid', disabled, full, styl
     gold: { bg: C.gold, fg: C.onGold, bd: C.gold },
   }[variant];
 
+  const feder = useDruckFeder();
+
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={feder.rein}
+      onPressOut={feder.raus}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!disabled }}
-      style={({ pressed }) => [
-        styles.button,
-        { backgroundColor: palette.bg, borderColor: palette.bd },
-        full && styles.buttonFull,
-        disabled && styles.buttonDisabled,
-        pressed && !disabled ? styles.pressed : null,
-        style,
-      ]}>
-      <Text style={[styles.buttonLabel, { color: palette.fg }]}>{label}</Text>
+      style={[full && styles.buttonFull, style]}>
+      <Animated.View
+        style={[
+          styles.button,
+          { backgroundColor: palette.bg, borderColor: palette.bd },
+          disabled && styles.buttonDisabled,
+          { transform: [{ scale: feder.groesse }] },
+        ]}>
+        <Text style={[styles.buttonLabel, { color: palette.fg }]}>{label}</Text>
+      </Animated.View>
     </Pressable>
   );
 }
@@ -121,7 +158,10 @@ type SchalterProps = {
 export function Schalter({ label, hinweis, an, onChange }: SchalterProps) {
   return (
     <Pressable
-      onPress={() => onChange(!an)}
+      onPress={() => {
+        tick();
+        onChange(!an);
+      }}
       accessibilityRole="switch"
       accessibilityState={{ checked: an }}
       accessibilityLabel={label}

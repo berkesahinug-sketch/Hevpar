@@ -24,6 +24,8 @@ export type EigenesProfil = {
   dialekt: string[];
   region: string | null;
   werte: string[];
+  /** Eigene Prompt-Antworten – ohne sie kann einem niemand ein Silav schicken */
+  antworten: Prompt[];
 };
 
 export type Nachricht = {
@@ -44,6 +46,8 @@ export type Thread = {
    */
   kontext: Prompt;
   nachrichten: Nachricht[];
+  /** Es gibt eine Nachricht, die noch nicht gelesen wurde */
+  ungelesen: boolean;
   /**
    * Fotos sind erst nach beidseitigem Match sichtbar.
    *
@@ -72,13 +76,24 @@ type AppState = {
   toggleAuswahl: (feld: 'dialekt' | 'werte', wert: string, max?: number) => void;
   setRegion: (wert: string | null) => void;
   setSichtbarkeit: (teil: Partial<Sichtbarkeit>) => void;
+  setEigeneAntworten: (antworten: Prompt[]) => void;
   /** Löscht alle Art.-9-Daten und widerruft die Einwilligung. Konto bleibt. */
   herkunftsdatenLoeschen: () => void;
 
   sendeSilav: (profil: Profil, prompt: Prompt, text: string) => void;
   antworte: (threadId: string, text: string) => void;
+  alsGelesen: (threadId: string) => void;
   matchSchliessen: () => void;
+  /** Anzahl Unterhaltungen mit ungelesenen Nachrichten – für den Tab-Punkt */
+  ungeleseneAnzahl: number;
 };
+
+/**
+ * So lange lässt sich die Gegenseite in der Demo mit ihrer Antwort Zeit.
+ * Absichtlich nicht sofort: Ein Gespräch hat einen Rhythmus, und der goldene
+ * Punkt auf dem Nachrichten-Tab ist der Grund, später wiederzukommen.
+ */
+const ANTWORT_VERZOEGERUNG_MS = 45_000;
 
 /* -------------------------------- Provider -------------------------------- */
 
@@ -94,6 +109,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     dialekt: [],
     region: null,
     werte: [],
+    antworten: [],
   });
   const [sichtbarkeit, setSichtbarkeitState] = useState<Sichtbarkeit>({
     herkunftImProfil: true,
@@ -126,6 +142,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setSichtbarkeitState((alt) => ({ ...alt, ...teil }));
   }, []);
 
+  const setEigeneAntworten = useCallback((antworten: Prompt[]) => {
+    setProfil((alt) => ({ ...alt, antworten }));
+  }, []);
+
   const herkunftsdatenLoeschen = useCallback(() => {
     setProfil((alt) => ({ ...alt, dialekt: [], region: null, werte: [] }));
     setEinwilligungState((alt) => ({ ...alt, herkunftsdaten: false }));
@@ -140,16 +160,29 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         stadt: ziel.stadt,
         verifiziert: ziel.verifiziert,
         kontext: prompt,
-        nachrichten: [
-          { vonMir: true, text },
-          { vonMir: false, text: antwortDemo(ziel.id) },
-        ],
+        nachrichten: [{ vonMir: true, text }],
+        ungelesen: false,
         fotosFrei: true,
       },
       // Falls es schon einen Thread mit dieser Person gab, ersetzt der neue ihn
       ...alt.filter((t) => t.id !== ziel.id),
     ]);
     setNeuerMatch(ziel);
+
+    // Die Antwort kommt mit Verzögerung und markiert den Thread als ungelesen.
+    setTimeout(() => {
+      setThreads((alt) =>
+        alt.map((t) =>
+          t.id === ziel.id
+            ? {
+                ...t,
+                nachrichten: [...t.nachrichten, { vonMir: false, text: antwortDemo(ziel.id) }],
+                ungelesen: true,
+              }
+            : t,
+        ),
+      );
+    }, ANTWORT_VERZOEGERUNG_MS);
   }, []);
 
   const antworte = useCallback((threadId: string, text: string) => {
@@ -160,7 +193,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const alsGelesen = useCallback((threadId: string) => {
+    setThreads((alt) =>
+      alt.map((t) => (t.id === threadId && t.ungelesen ? { ...t, ungelesen: false } : t)),
+    );
+  }, []);
+
   const matchSchliessen = useCallback(() => setNeuerMatch(null), []);
+
+  const ungeleseneAnzahl = threads.filter((t) => t.ungelesen).length;
 
   const wert = useMemo<AppState>(
     () => ({
@@ -173,10 +214,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       toggleAuswahl,
       setRegion,
       setSichtbarkeit,
+      setEigeneAntworten,
       herkunftsdatenLoeschen,
       sendeSilav,
       antworte,
+      alsGelesen,
       matchSchliessen,
+      ungeleseneAnzahl,
     }),
     [
       einwilligung,
@@ -188,10 +232,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       toggleAuswahl,
       setRegion,
       setSichtbarkeit,
+      setEigeneAntworten,
       herkunftsdatenLoeschen,
       sendeSilav,
       antworte,
+      alsGelesen,
       matchSchliessen,
+      ungeleseneAnzahl,
     ],
   );
 

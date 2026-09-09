@@ -1,16 +1,17 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Erscheinen } from '@/components/erscheinen';
 import { Kilim } from '@/components/kilim';
 import { Button, Chip, Eyebrow, Schalter } from '@/components/ui';
-import { DIALEKTE, MAX_WERTE, MINDESTALTER, REGIONEN, WERTE } from '@/data/kultur';
-import { useApp } from '@/state/app-state';
-import { C, F, S } from '@/theme/tokens';
+import { DIALEKTE, MAX_WERTE, MINDESTALTER, PROMPTS, REGIONEN, WERTE } from '@/data/kultur';
+import { useApp, type EigenesProfil } from '@/state/app-state';
+import { C, F, RADIUS, S } from '@/theme/tokens';
 
 /**
- * Onboarding in vier Schritten.
+ * Onboarding in fünf Schritten.
  *
  * Schritt 1 ist die Einwilligung. Dialekt, Herkunftsregion und Werte sind nach
  * DSGVO Art. 9 besondere Kategorien personenbezogener Daten; sie dürfen erst
@@ -18,18 +19,20 @@ import { C, F, S } from '@/theme/tokens';
  * trotzdem in die App – nur ohne diese Angaben. Eine Einwilligung, ohne die
  * nichts geht, ist rechtlich keine freiwillige Einwilligung.
  */
-const SCHRITTE = 4;
+const SCHRITTE = 5;
 
 export default function Onboarding() {
   const insets = useSafeAreaInsets();
   const [schritt, setSchritt] = useState(0);
-  const { einwilligung, setEinwilligung, profil, toggleAuswahl, setRegion } = useApp();
+  const { einwilligung, setEinwilligung, profil, toggleAuswahl, setRegion, setEigeneAntworten } =
+    useApp();
 
   const weiter = () => {
-    // Ohne Einwilligung in die Herkunftsdaten überspringen wir die Abfragen
-    // dazu vollständig und gehen direkt in die App.
+    // Ohne Einwilligung in die Herkunftsdaten überspringen wir nur die
+    // Abfragen dazu (Schritte 2 bis 4). Die eigenen Antworten kommen trotzdem –
+    // ohne sie kann einem niemand ein Silav schicken.
     if (schritt === 0 && !einwilligung.herkunftsdaten) {
-      router.replace('/entdecken');
+      setSchritt(SCHRITTE - 1);
       return;
     }
     if (schritt < SCHRITTE - 1) setSchritt(schritt + 1);
@@ -37,7 +40,8 @@ export default function Onboarding() {
   };
 
   const zurueck = () => {
-    if (schritt > 0) setSchritt(schritt - 1);
+    if (schritt === SCHRITTE - 1 && !einwilligung.herkunftsdaten) setSchritt(0);
+    else if (schritt > 0) setSchritt(schritt - 1);
     else router.back();
   };
 
@@ -65,7 +69,7 @@ export default function Onboarding() {
           onWeiter={weiter}
           onZurueck={zurueck}
         />
-      ) : (
+      ) : schritt < SCHRITTE - 1 ? (
         <AuswahlSchritt
           schritt={schritt}
           profil={profil}
@@ -73,6 +77,14 @@ export default function Onboarding() {
           setRegion={setRegion}
           insets={insets.bottom}
           onWeiter={weiter}
+          onZurueck={zurueck}
+        />
+      ) : (
+        <AntwortSchritt
+          profil={profil}
+          setEigeneAntworten={setEigeneAntworten}
+          insets={insets.bottom}
+          onFertig={() => router.replace('/entdecken')}
           onZurueck={zurueck}
         />
       )}
@@ -224,6 +236,105 @@ function AuswahlSchritt({
   );
 }
 
+/* ------------------------- Schritt 5: Deine Antworten ------------------------- */
+
+function AntwortSchritt({
+  profil,
+  setEigeneAntworten,
+  insets,
+  onFertig,
+  onZurueck,
+}: {
+  profil: EigenesProfil;
+  setEigeneAntworten: (antworten: { frage: string; antwort: string }[]) => void;
+  insets: number;
+  onFertig: () => void;
+  onZurueck: () => void;
+}) {
+  const [gespeichert, setGespeichert] = useState(profil.antworten);
+  const beantwortet = gespeichert.map((a) => a.frage);
+  const offene = PROMPTS.filter((f) => !beantwortet.includes(f));
+  const [frage, setFrage] = useState<string>(offene[0] ?? PROMPTS[0]);
+  const [text, setText] = useState('');
+
+  // Die aktuelle Eingabe zaehlt mit: Wer eine Antwort getippt hat, muss sie
+  // nicht erst extra speichern, um weiterzukommen.
+  const aktuelleAntwort = text.trim();
+  const alle = aktuelleAntwort ? [...gespeichert, { frage, antwort: aktuelleAntwort }] : gespeichert;
+
+  const ablegen = () => {
+    if (!aktuelleAntwort) return;
+    const neu = [...gespeichert, { frage, antwort: aktuelleAntwort }];
+    setGespeichert(neu);
+    setText('');
+    const naechste = PROMPTS.filter((f) => !neu.some((a) => a.frage === f));
+    if (naechste.length) setFrage(naechste[0]);
+  };
+
+  const fertig = () => {
+    setEigeneAntworten(alle.slice(0, 3));
+    onFertig();
+  };
+
+  return (
+    <>
+      <ScrollView contentContainerStyle={styles.inhalt} showsVerticalScrollIndicator={false}>
+        <Eyebrow>Schritt {SCHRITTE} von {SCHRITTE}</Eyebrow>
+        <Text style={styles.titel}>Und jetzt du</Text>
+        <Text style={styles.hinweis}>
+          Wähle eine Frage und antworte so, wie nur du antworten würdest. Auf diese Antworten
+          kommen später die Silavs — nicht auf dein Foto.
+        </Text>
+
+        {gespeichert.map((a) => (
+          <Erscheinen key={a.frage} style={styles.abgelegt}>
+            <Eyebrow>{a.frage}</Eyebrow>
+            <Text style={styles.abgelegtText}>{a.antwort}</Text>
+          </Erscheinen>
+        ))}
+
+        {gespeichert.length < 3 ? (
+          <>
+            <View style={styles.chips}>
+              {offene.map((f) => (
+                <Chip key={f} label={f} active={frage === f} onPress={() => setFrage(f)} small />
+              ))}
+            </View>
+
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              placeholder="Deine Antwort — zwei ehrliche Sätze reichen."
+              placeholderTextColor={C.muted}
+              multiline
+              style={styles.eingabe}
+              accessibilityLabel={`Antwort auf ${frage}`}
+            />
+
+            {aktuelleAntwort && gespeichert.length < 2 ? (
+              <View style={styles.nochEine}>
+                <Button variant="ghost" label="Ablegen und noch eine beantworten" onPress={ablegen} />
+              </View>
+            ) : null}
+          </>
+        ) : (
+          <Text style={styles.hinweis}>
+            Drei Antworten sind das Maximum — mehr Fläche bekommt hier niemand.
+          </Text>
+        )}
+      </ScrollView>
+
+      <Navigation
+        insets={insets}
+        onZurueck={onZurueck}
+        onWeiter={fertig}
+        bereit={alle.length > 0}
+        label="Fertig"
+      />
+    </>
+  );
+}
+
 /* -------------------------------- Fußleiste -------------------------------- */
 
 function Navigation({
@@ -260,6 +371,32 @@ const styles = StyleSheet.create({
   schalterGruppe: { marginTop: S.xl },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: S.xl },
 
+
   fussleiste: { flexDirection: 'row', gap: 10, paddingTop: S.md },
   weiter: { flex: 1 },
+
+  abgelegt: {
+    backgroundColor: C.sand,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: S.md,
+    marginTop: S.lg,
+  },
+  abgelegtText: { fontFamily: F.serif, fontSize: 15.5, lineHeight: 22, color: C.ink },
+
+  eingabe: {
+    marginTop: S.md,
+    padding: 12,
+    minHeight: 96,
+    borderRadius: RADIUS.button,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.card,
+    fontFamily: F.serif,
+    fontSize: 16,
+    lineHeight: 23,
+    color: C.ink,
+    textAlignVertical: 'top',
+  },
+  nochEine: { marginTop: 10, alignSelf: 'flex-start' },
 });

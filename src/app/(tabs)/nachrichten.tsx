@@ -40,10 +40,13 @@ export default function Nachrichten() {
                 <WovenAvatar seed={thread.id} size={50} radius={12} />
                 <View style={styles.zeileText}>
                   <Text style={styles.name}>{thread.name}</Text>
-                  <Text style={styles.vorschau} numberOfLines={1}>
+                  <Text
+                    style={[styles.vorschau, thread.ungelesen && styles.vorschauNeu]}
+                    numberOfLines={1}>
                     {letzte?.text ?? ''}
                   </Text>
                 </View>
+                {thread.ungelesen ? <View style={styles.punkt} /> : null}
               </Pressable>
             );
           })}
@@ -73,4 +76,6 @@ const styles = StyleSheet.create({
   zeileText: { flex: 1, minWidth: 0 },
   name: { fontFamily: F.serif, fontSize: 18, color: C.ink },
   vorschau: { fontFamily: F.sans, fontSize: 13, color: C.muted, marginTop: 2 },
+  vorschauNeu: { fontFamily: F.sansSemi, color: C.ink },
+  punkt: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.gold },
 });

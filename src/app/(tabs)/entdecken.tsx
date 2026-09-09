@@ -1,13 +1,15 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Erscheinen } from '@/components/erscheinen';
 import { MatchOverlay } from '@/components/match-overlay';
 import { ProfileCard } from '@/components/profile-card';
 import { SilavSheet } from '@/components/silav-sheet';
 import { Chip, TextLink } from '@/components/ui';
 import { DEMO_PROFILE, FILTER, type Profil, type Prompt } from '@/data/demo-profile';
+import { impuls } from '@/lib/haptik';
 import { useApp } from '@/state/app-state';
 import { C, F, S } from '@/theme/tokens';
 
@@ -18,11 +20,24 @@ export default function Entdecken() {
   const [filterOffen, setFilterOffen] = useState(false);
   const [filter, setFilter] = useState<string | null>(null);
   const [silavZiel, setSilavZiel] = useState<{ profil: Profil; prompt: Prompt } | null>(null);
+  const [profile, setProfile] = useState(DEMO_PROFILE);
+  const [ladeNeu, setLadeNeu] = useState(false);
 
-  const liste = filter ? DEMO_PROFILE.filter((p) => p.chips.includes(filter)) : DEMO_PROFILE;
+  const liste = filter ? profile.filter((p) => p.chips.includes(filter)) : profile;
+
+  // Ziehen zum Aktualisieren. Mit echten Daten holt das neue Profile aus
+  // Supabase; in der Demo mischt es die Reihenfolge.
+  const aktualisieren = useCallback(() => {
+    setLadeNeu(true);
+    setTimeout(() => {
+      setProfile((alt) => [...alt].sort(() => Math.random() - 0.5));
+      setLadeNeu(false);
+    }, 600);
+  }, []);
 
   const silavSenden = (text: string) => {
     if (!silavZiel) return;
+    impuls();
     sendeSilav(silavZiel.profil, silavZiel.prompt, text);
     setSilavZiel(null);
   };
@@ -31,7 +46,10 @@ export default function Entdecken() {
     <View style={styles.screen}>
       <ScrollView
         contentContainerStyle={[styles.inhalt, { paddingTop: insets.top + S.lg }]}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={ladeNeu} onRefresh={aktualisieren} tintColor={C.garnet} />
+        }>
         <View style={styles.kopf}>
           <Text style={styles.titel}>Entdecken</Text>
           <TextLink
@@ -61,12 +79,13 @@ export default function Entdecken() {
         ) : null}
 
         <View style={styles.liste}>
-          {liste.map((profil) => (
-            <ProfileCard
-              key={profil.id}
-              profil={profil}
-              onSilav={(p, prompt) => setSilavZiel({ profil: p, prompt })}
-            />
+          {liste.map((profil, i) => (
+            <Erscheinen key={profil.id} index={i}>
+              <ProfileCard
+                profil={profil}
+                onSilav={(p, prompt) => setSilavZiel({ profil: p, prompt })}
+              />
+            </Erscheinen>
           ))}
 
           {liste.length === 0 ? (

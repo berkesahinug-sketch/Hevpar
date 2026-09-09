@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -21,10 +21,14 @@ import { C, F, RADIUS, S } from '@/theme/tokens';
 export default function Chat() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const { threads, antworte } = useApp();
+  const { threads, antworte, alsGelesen } = useApp();
   const [text, setText] = useState('');
 
   const thread = threads.find((t) => t.id === id);
+
+  useEffect(() => {
+    if (id) alsGelesen(id);
+  }, [id, alsGelesen, thread?.nachrichten.length]);
 
   if (!thread) {
     return (
