@@ -4,6 +4,8 @@ import { Kilim } from '@/components/kilim';
 import { Chip, Eyebrow } from '@/components/ui';
 import { WovenAvatar } from '@/components/woven-avatar';
 import type { Profil, Prompt } from '@/data/demo-profile';
+import { woerterFuer } from '@/data/sprache';
+import { useApp } from '@/state/app-state';
 import { C, F, RADIUS, S } from '@/theme/tokens';
 
 type Props = {
@@ -19,6 +21,9 @@ type Props = {
  * Kontakte – genau das ist beabsichtigt: weniger Kontakte, höhere Qualität.
  */
 export function ProfileCard({ profil, onSilav }: Props) {
+  const { profil: ich } = useApp();
+  const woerter = woerterFuer(ich.dialekt);
+
   return (
     <View style={styles.karte}>
       <View style={styles.kopf}>
@@ -52,9 +57,9 @@ export function ProfileCard({ profil, onSilav }: Props) {
             <Pressable
               onPress={() => onSilav(profil, prompt)}
               accessibilityRole="button"
-              accessibilityLabel={`Silav an ${profil.name} zur Antwort auf ${prompt.frage}`}
+              accessibilityLabel={`${woerter.silav} an ${profil.name} zur Antwort auf ${prompt.frage}`}
               style={({ pressed }) => [styles.silav, pressed && { opacity: 0.7 }]}>
-              <Text style={styles.silavText}>Silav zu dieser Antwort</Text>
+              <Text style={styles.silavText}>{woerter.silav} zu dieser Antwort</Text>
             </Pressable>
           </View>
         ))}

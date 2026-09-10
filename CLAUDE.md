@@ -85,6 +85,32 @@ Als Nächstes:
 Offene Entscheidungen: Launch-Stadt (Berlin, London oder Stockholm), Rechtsform
 (Einzelperson vs. BV), Zeitpunkt der Rechtsberatung.
 
+## Beschlossene Ausbaurichtung (Stand September 2026)
+
+Von Berke entschieden, in dieser Reihenfolge gebaut:
+
+1. **Cejn (Events).** Feste, Konzerte, Sprachcafés, Vereinsabende — sichtbar
+   nach Stadt, mit stiller Zusage (nur Zähler, nie Namen: Teilnahme kann
+   politisch gelesen werden, Art.-9-Nähe) und Einladen aus den eigenen
+   Matches heraus. Events sind kuratiert; offene Einreichung erst mit
+   Prüfprozess (Moderationsfläche).
+2. **Dialekt-Schlüsselwörter.** Die Konzeptwörter der App (Silav, Cejn,
+   Frage des Tages, Zusage) erscheinen im zuerst gewählten Dialekt.
+   Wörterbuch: `src/data/sprache.ts`. OFFEN: Formen von
+   Muttersprachler:innen prüfen lassen, besonders Zazakî, Kelhurî, Hewramî.
+3. **Pirsa rojê (Frage des Tages).** Täglich rotierende, kulturell
+   verankerte Frage. Einsatz ist die eigene Antwort: erst antworten, dann
+   die anderen sehen — und auf sie Silav schicken können.
+
+Gemerkte Ideen, noch nicht beschlossen: Stimme vor Foto (Sprachnotiz auf
+Prompts, Dengbêj-Gedanke), Schrift-Brücke im Chat (arabisch ↔ lateinisch),
+Verstehen/Sprechen als zwei Stufen pro Dialekt, Einladung statt offener
+Anmeldung zum Launch, Leben in mehreren Städten.
+
+Bewusst abgelehnt: Endlos-Feed und Dark Patterns. Wiederkommen entsteht
+durch Rhythmus (verzögerte Antworten, Tagesfrage, Events), nicht durch
+Festhalten.
+
 ## Arbeitsweise
 
 - Ein Schritt nach dem anderen, jeweils mit kurzer Erklärung, warum.

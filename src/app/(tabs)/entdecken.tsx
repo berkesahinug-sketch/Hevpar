@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Erscheinen } from '@/components/erscheinen';
 import { MatchOverlay } from '@/components/match-overlay';
+import { Tageskarte } from '@/components/tageskarte';
 import { ProfileCard } from '@/components/profile-card';
 import { SilavSheet } from '@/components/silav-sheet';
 import { Chip, TextLink } from '@/components/ui';
@@ -63,6 +64,8 @@ export default function Entdecken() {
             ? '1 Profil in deiner Nähe und in verbundenen Städten.'
             : `${liste.length} Profile in deiner Nähe und in verbundenen Städten.`}
         </Text>
+
+        <Tageskarte onSilav={(p, prompt) => setSilavZiel({ profil: p, prompt })} />
 
         {filterOffen ? (
           <View style={styles.filter}>

@@ -86,6 +86,13 @@ type AppState = {
   matchSchliessen: () => void;
   /** Anzahl Unterhaltungen mit ungelesenen Nachrichten – für den Tab-Punkt */
   ungeleseneAnzahl: number;
+
+  /** Event-IDs, zu denen zugesagt wurde. Privat – andere sehen nur Zahlen. */
+  zusagen: string[];
+  toggleZusage: (eventId: string) => void;
+  /** Eigene Antwort auf die heutige Frage des Tages */
+  tagesAntwort: string | null;
+  setTagesAntwort: (text: string) => void;
 };
 
 /**
@@ -117,6 +124,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   });
   const [threads, setThreads] = useState<Thread[]>([]);
   const [neuerMatch, setNeuerMatch] = useState<Profil | null>(null);
+  const [zusagen, setZusagen] = useState<string[]>([]);
+  const [tagesAntwort, setTagesAntwortState] = useState<string | null>(null);
 
   const setEinwilligung = useCallback((teil: Partial<Einwilligung>) => {
     setEinwilligungState((alt) => ({ ...alt, ...teil }));
@@ -201,6 +210,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const matchSchliessen = useCallback(() => setNeuerMatch(null), []);
 
+  const toggleZusage = useCallback((eventId: string) => {
+    setZusagen((alt) =>
+      alt.includes(eventId) ? alt.filter((id) => id !== eventId) : [...alt, eventId],
+    );
+  }, []);
+
+  const setTagesAntwort = useCallback((text: string) => {
+    setTagesAntwortState(text.trim() || null);
+  }, []);
+
   const ungeleseneAnzahl = threads.filter((t) => t.ungelesen).length;
 
   const wert = useMemo<AppState>(
@@ -221,6 +240,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       alsGelesen,
       matchSchliessen,
       ungeleseneAnzahl,
+      zusagen,
+      toggleZusage,
+      tagesAntwort,
+      setTagesAntwort,
     }),
     [
       einwilligung,
@@ -239,6 +262,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       alsGelesen,
       matchSchliessen,
       ungeleseneAnzahl,
+      zusagen,
+      toggleZusage,
+      tagesAntwort,
+      setTagesAntwort,
     ],
   );
 

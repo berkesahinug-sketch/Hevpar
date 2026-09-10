@@ -14,6 +14,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Kilim } from '@/components/kilim';
 import { Button } from '@/components/ui';
 import type { Profil, Prompt } from '@/data/demo-profile';
+import { woerterFuer } from '@/data/sprache';
+import { useApp } from '@/state/app-state';
 import { C, F, RADIUS, S } from '@/theme/tokens';
 
 type Props = {
@@ -31,6 +33,8 @@ type Props = {
  */
 export function SilavSheet({ ziel, onSchliessen, onSenden }: Props) {
   const insets = useSafeAreaInsets();
+  const { profil } = useApp();
+  const woerter = woerterFuer(profil.dialekt);
   const [text, setText] = useState('');
 
   const schliessen = () => {
@@ -84,7 +88,7 @@ export function SilavSheet({ ziel, onSchliessen, onSenden }: Props) {
               <Button variant="ghost" label="Abbrechen" onPress={schliessen} />
               <Button
                 style={styles.senden}
-                label="Silav senden"
+                label={`${woerter.silav} senden`}
                 disabled={!text.trim()}
                 onPress={senden}
               />
