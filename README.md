@@ -91,6 +91,36 @@ Arbeitsspeicher — beim Schließen ist alles weg. Als Nächstes:
 
 Die Platzhalter im Code sind mit Kommentaren markiert.
 
+## Supabase einrichten (Schritt 3 des Plans)
+
+Supabase ist der Server der App: Konten, Profile, Nachrichten, Fotos, Events.
+Das Datenmodell samt aller Zugriffsregeln liegt fertig in
+`supabase/migrationen/001_grundmodell.sql` — inklusive der serverseitigen
+Regel "Fotos erst nach dem Match". Die Regeln sind mit
+`supabase/tests/regeltest.sql` gegen ein echtes Postgres getestet.
+
+Einrichtung (einmalig, ca. 10 Minuten, kostenlos):
+
+1. Auf [supabase.com](https://supabase.com) mit GitHub anmelden.
+2. **New project**: Name `hevpar`, Datenbank-Passwort generieren lassen und
+   im Passwortmanager speichern, Region **Frankfurt (eu-central-1)** —
+   Pflicht, EU-Datenhaltung.
+3. Warten, bis das Projekt bereit ist (~2 Minuten).
+4. Links **SQL Editor** öffnen → **New query** → den kompletten Inhalt von
+   `supabase/migrationen/001_grundmodell.sql` einfügen → **Run**.
+   Erwartete Ausgabe: "Success. No rows returned".
+5. **Settings → API**: die `Project URL` und den `anon public`-Schlüssel
+   kopieren.
+6. Im Projektordner `.env.example` zu `.env` kopieren und beide Werte
+   eintragen. `.env` bleibt lokal und landet nie im Repository.
+
+Der `service_role`-Schlüssel wird nirgendwo gebraucht und darf die
+Supabase-Seite nie verlassen.
+
+Kosten: Der freie Tarif reicht für Entwicklung und die ersten Tester (500 MB
+Datenbank, 1 GB Speicher). Ohne Aktivität pausiert das Projekt nach einer
+Woche und lässt sich im Dashboard wieder aufwecken. Keine Kreditkarte nötig.
+
 ## Die App als echte App bauen (EAS)
 
 Expo Go zeigt die App, ist aber nicht die App — es ist eine Hülle, die deinen
