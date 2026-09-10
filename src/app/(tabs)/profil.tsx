@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,7 +17,16 @@ const KONTAKT = 'kontakt@hevpar.app';
 
 export default function ProfilScreen() {
   const insets = useSafeAreaInsets();
-  const { profil, einwilligung, sichtbarkeit, setSichtbarkeit, herkunftsdatenLoeschen } = useApp();
+  const {
+    profil,
+    einwilligung,
+    sichtbarkeit,
+    setSichtbarkeit,
+    herkunftsdatenLoeschen,
+    modus,
+    abmelden,
+    kontoEndgueltigLoeschen,
+  } = useApp();
 
   const angaben = [
     ...profil.dialekt,
@@ -44,12 +54,34 @@ export default function ProfilScreen() {
         {
           text: 'Konto löschen',
           style: 'destructive',
-          // Wird an Supabase angebunden, sobald es Konten gibt (Schritt 4).
-          onPress: () =>
-            Alert.alert('Noch nicht verfügbar', 'Die Kontolöschung wird mit der Anmeldung gebaut.'),
+          onPress: async () => {
+            if (modus === 'demo') {
+              Alert.alert('Demo-Modus', 'Ohne Verbindung zu Supabase gibt es kein Konto zu löschen.');
+              return;
+            }
+            try {
+              await kontoEndgueltigLoeschen();
+              router.replace('/');
+            } catch (e) {
+              Alert.alert('Löschen hat nicht geklappt', e instanceof Error ? e.message : 'Unbekannter Fehler.');
+            }
+          },
         },
       ],
     );
+  };
+
+  const abmeldenFragen = () => {
+    Alert.alert('Abmelden?', 'Du kannst dich jederzeit wieder anmelden.', [
+      { text: 'Abbrechen', style: 'cancel' },
+      {
+        text: 'Abmelden',
+        onPress: async () => {
+          await abmelden();
+          router.replace('/');
+        },
+      },
+    ]);
   };
 
   return (
@@ -63,7 +95,9 @@ export default function ProfilScreen() {
         <WovenAvatar seed="berke" size={70} />
         <View>
           <Text style={styles.name}>{profil.name}</Text>
-          <Text style={styles.status}>Verifizierung ausstehend</Text>
+          <Text style={styles.status}>
+            {profil.stadt ? `${profil.stadt} · ` : ''}Verifizierung ausstehend
+          </Text>
         </View>
       </View>
 
@@ -142,6 +176,7 @@ export default function ProfilScreen() {
           onPress={herkunftLoeschenFragen}
           gefahr={false}
         />
+        {modus === 'echt' ? <Aktion label="Abmelden" onPress={abmeldenFragen} gefahr={false} /> : null}
         <Aktion label="Konto löschen" onPress={kontoLoeschenFragen} gefahr />
       </View>
 

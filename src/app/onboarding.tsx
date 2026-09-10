@@ -1,17 +1,17 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Erscheinen } from '@/components/erscheinen';
 import { Kilim } from '@/components/kilim';
 import { Button, Chip, Eyebrow, Schalter } from '@/components/ui';
-import { DIALEKTE, MAX_WERTE, MINDESTALTER, PROMPTS, REGIONEN, WERTE } from '@/data/kultur';
+import { DIALEKTE, MAX_WERTE, MINDESTALTER, PROMPTS, REGIONEN, STAEDTE, WERTE } from '@/data/kultur';
 import { useApp, type EigenesProfil } from '@/state/app-state';
 import { C, F, RADIUS, S } from '@/theme/tokens';
 
 /**
- * Onboarding in fünf Schritten.
+ * Onboarding in sechs Schritten.
  *
  * Schritt 1 ist die Einwilligung. Dialekt, Herkunftsregion und Werte sind nach
  * DSGVO Art. 9 besondere Kategorien personenbezogener Daten; sie dürfen erst
@@ -19,30 +19,62 @@ import { C, F, RADIUS, S } from '@/theme/tokens';
  * trotzdem in die App – nur ohne diese Angaben. Eine Einwilligung, ohne die
  * nichts geht, ist rechtlich keine freiwillige Einwilligung.
  */
-const SCHRITTE = 5;
+const SCHRITTE = 6;
 
 export default function Onboarding() {
   const insets = useSafeAreaInsets();
   const [schritt, setSchritt] = useState(0);
-  const { einwilligung, setEinwilligung, profil, toggleAuswahl, setRegion, setEigeneAntworten } =
-    useApp();
+  const {
+    einwilligung,
+    setEinwilligung,
+    profil,
+    toggleAuswahl,
+    setRegion,
+    setEigeneAntworten,
+    onboardingSpeichern,
+    modus,
+  } = useApp();
+
+  // Schritt 1: Wer bist du. Bleibt lokal, bis am Ende alles gespeichert wird.
+  const [name, setName] = useState(profil.name);
+  const [geburtsdatum, setGeburtsdatum] = useState('');
+  const [stadt, setStadt] = useState<string | null>(profil.stadt || null);
+  const [speichert, setSpeichert] = useState(false);
 
   const weiter = () => {
     // Ohne Einwilligung in die Herkunftsdaten überspringen wir nur die
-    // Abfragen dazu (Schritte 2 bis 4). Die eigenen Antworten kommen trotzdem –
+    // Abfragen dazu (Schritte 3 bis 5). Die eigenen Antworten kommen trotzdem –
     // ohne sie kann einem niemand ein Silav schicken.
-    if (schritt === 0 && !einwilligung.herkunftsdaten) {
+    if (schritt === 1 && !einwilligung.herkunftsdaten) {
       setSchritt(SCHRITTE - 1);
       return;
     }
     if (schritt < SCHRITTE - 1) setSchritt(schritt + 1);
-    else router.replace('/entdecken');
   };
 
   const zurueck = () => {
-    if (schritt === SCHRITTE - 1 && !einwilligung.herkunftsdaten) setSchritt(0);
+    if (schritt === SCHRITTE - 1 && !einwilligung.herkunftsdaten) setSchritt(1);
     else if (schritt > 0) setSchritt(schritt - 1);
     else router.back();
+  };
+
+  const abschliessen = async () => {
+    setSpeichert(true);
+    try {
+      await onboardingSpeichern({
+        name: name.trim(),
+        geburtsdatum: alsIso(geburtsdatum) ?? '',
+        stadt: stadt ?? '',
+      });
+      router.replace('/entdecken');
+    } catch (e) {
+      Alert.alert(
+        'Speichern hat nicht geklappt',
+        e instanceof Error ? e.message : 'Unbekannter Fehler. Versuch es nochmal.',
+      );
+    } finally {
+      setSpeichert(false);
+    }
   };
 
   return (
@@ -62,6 +94,19 @@ export default function Onboarding() {
       </View>
 
       {schritt === 0 ? (
+        <WerBistDuSchritt
+          name={name}
+          setName={setName}
+          geburtsdatum={geburtsdatum}
+          setGeburtsdatum={setGeburtsdatum}
+          stadt={stadt}
+          setStadt={setStadt}
+          altersPflicht={modus === 'echt'}
+          insets={insets.bottom}
+          onWeiter={weiter}
+          onZurueck={zurueck}
+        />
+      ) : schritt === 1 ? (
         <EinwilligungsSchritt
           einwilligung={einwilligung}
           setEinwilligung={setEinwilligung}
@@ -79,12 +124,17 @@ export default function Onboarding() {
           onWeiter={weiter}
           onZurueck={zurueck}
         />
+      ) : speichert ? (
+        <View style={styles.laden}>
+          <ActivityIndicator color={C.garnet} />
+          <Text style={styles.hinweis}>Dein Profil wird gespeichert …</Text>
+        </View>
       ) : (
         <AntwortSchritt
           profil={profil}
           setEigeneAntworten={setEigeneAntworten}
           insets={insets.bottom}
-          onFertig={() => router.replace('/entdecken')}
+          onFertig={abschliessen}
           onZurueck={zurueck}
         />
       )}
@@ -92,7 +142,100 @@ export default function Onboarding() {
   );
 }
 
-/* ---------------------------- Schritt 1: Zustimmung ---------------------------- */
+/* ---------------------------- Schritt 1: Wer bist du --------------------------- */
+
+/** "TT.MM.JJJJ" -> "JJJJ-MM-TT", oder null wenn es kein echtes Datum ist. */
+function alsIso(eingabe: string): string | null {
+  const m = eingabe.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (!m) return null;
+  const [_, t, mo, j] = m;
+  const d = new Date(Number(j), Number(mo) - 1, Number(t));
+  if (d.getFullYear() !== Number(j) || d.getMonth() !== Number(mo) - 1 || d.getDate() !== Number(t)) {
+    return null;
+  }
+  return `${j}-${mo.padStart(2, '0')}-${t.padStart(2, '0')}`;
+}
+
+/** Ist die Person nach diesem Datum mindestens 18? */
+function mindestens18(iso: string): boolean {
+  const grenze = new Date();
+  grenze.setFullYear(grenze.getFullYear() - MINDESTALTER);
+  return new Date(iso) <= grenze;
+}
+
+function WerBistDuSchritt({
+  name,
+  setName,
+  geburtsdatum,
+  setGeburtsdatum,
+  stadt,
+  setStadt,
+  altersPflicht,
+  insets,
+  onWeiter,
+  onZurueck,
+}: {
+  name: string;
+  setName: (v: string) => void;
+  geburtsdatum: string;
+  setGeburtsdatum: (v: string) => void;
+  stadt: string | null;
+  setStadt: (v: string | null) => void;
+  /** Im echten Modus ist das Geburtsdatum Pflicht (18+-Pruefung der Datenbank) */
+  altersPflicht: boolean;
+  insets: number;
+  onWeiter: () => void;
+  onZurueck: () => void;
+}) {
+  const iso = alsIso(geburtsdatum);
+  const datumOk = !altersPflicht && !geburtsdatum.trim() ? true : !!iso && mindestens18(iso);
+  const zuJung = !!iso && !mindestens18(iso);
+  const bereit = name.trim().length > 0 && !!stadt && datumOk;
+
+  return (
+    <>
+      <ScrollView contentContainerStyle={styles.inhalt} showsVerticalScrollIndicator={false}>
+        <Eyebrow>Schritt 1 von {SCHRITTE}</Eyebrow>
+        <Text style={styles.titel}>Wer bist du?</Text>
+        <Text style={styles.hinweis}>
+          Dein Vorname reicht. Das Geburtsdatum bleibt privat — es prüft nur das Mindestalter.
+        </Text>
+
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          placeholder="Vorname"
+          placeholderTextColor={C.muted}
+          style={styles.feld}
+          accessibilityLabel="Vorname"
+        />
+        <TextInput
+          value={geburtsdatum}
+          onChangeText={setGeburtsdatum}
+          placeholder="Geburtsdatum, z. B. 01.05.1995"
+          placeholderTextColor={C.muted}
+          keyboardType="numbers-and-punctuation"
+          style={styles.feld}
+          accessibilityLabel="Geburtsdatum"
+        />
+        {zuJung ? (
+          <Text style={styles.warnung}>Hevpar ist ausschließlich für Erwachsene — Mindestalter {MINDESTALTER}.</Text>
+        ) : null}
+
+        <Text style={[styles.hinweis, { marginTop: S.lg }]}>In welcher Stadt lebst du?</Text>
+        <View style={styles.chips}>
+          {STAEDTE.map((s) => (
+            <Chip key={s} label={s} active={stadt === s} onPress={() => setStadt(stadt === s ? null : s)} />
+          ))}
+        </View>
+      </ScrollView>
+
+      <Navigation insets={insets} onZurueck={onZurueck} onWeiter={onWeiter} bereit={bereit} label="Weiter" />
+    </>
+  );
+}
+
+/* ---------------------------- Schritt 2: Zustimmung ---------------------------- */
 
 function EinwilligungsSchritt({
   einwilligung,
@@ -110,8 +253,8 @@ function EinwilligungsSchritt({
   return (
     <>
       <ScrollView contentContainerStyle={styles.inhalt} showsVerticalScrollIndicator={false}>
-        <Eyebrow>Schritt 1 von {SCHRITTE}</Eyebrow>
-        <Text style={styles.titel}>Bevor wir anfangen</Text>
+        <Eyebrow>Schritt 2 von {SCHRITTE}</Eyebrow>
+        <Text style={styles.titel}>Bevor wir weitermachen</Text>
         <Text style={styles.hinweis}>
           Zwei Angaben brauchen deine ausdrückliche Zustimmung. Du kannst sie später jederzeit
           zurücknehmen, ohne dein Konto zu verlieren.
@@ -185,7 +328,7 @@ function AuswahlSchritt({
   onWeiter: () => void;
   onZurueck: () => void;
 }) {
-  const block = BLOECKE[schritt - 1];
+  const block = BLOECKE[schritt - 2];
   const mehrfach = block.feld !== 'region';
   const gewaehlt: string[] = mehrfach
     ? profil[block.feld as 'dialekt' | 'werte']
@@ -374,6 +517,21 @@ const styles = StyleSheet.create({
 
   fussleiste: { flexDirection: 'row', gap: 10, paddingTop: S.md },
   weiter: { flex: 1 },
+
+  feld: {
+    marginTop: S.md,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderRadius: RADIUS.button,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.card,
+    fontFamily: F.sans,
+    fontSize: 15,
+    color: C.ink,
+  },
+  warnung: { fontFamily: F.sans, fontSize: 12.5, lineHeight: 19, color: C.garnet, marginTop: 8 },
+  laden: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
 
   abgelegt: {
     backgroundColor: C.sand,

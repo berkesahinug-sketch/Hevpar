@@ -16,13 +16,19 @@ import 'react-native-url-polyfill/auto';
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
+// Beim Vorrendern der Seiten (Node, ohne Browser) gibt es keinen
+// Sitzungsspeicher - dort darf der Client nicht versuchen, eine Sitzung zu
+// laden, sonst stuerzt der Render-Prozess ab. Auf Geraet und im Browser
+// existiert "window", und die Sitzung wird normal gespeichert.
+const hatSpeicher = typeof window !== 'undefined';
+
 export const supabase =
   url && anonKey
     ? createClient(url, anonKey, {
         auth: {
-          storage: AsyncStorage,
-          autoRefreshToken: true,
-          persistSession: true,
+          storage: hatSpeicher ? AsyncStorage : undefined,
+          autoRefreshToken: hatSpeicher,
+          persistSession: hatSpeicher,
           // Kein Browser-Redirect-Login in einer nativen App
           detectSessionInUrl: false,
         },

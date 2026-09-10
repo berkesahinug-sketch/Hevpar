@@ -1,6 +1,8 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import type { Profil, Prompt } from '@/data/demo-profile';
+import * as konto from '@/lib/konto';
+import { supabase } from '@/lib/supabase';
 
 /* --------------------------------- Typen ---------------------------------- */
 
@@ -21,6 +23,7 @@ export type Einwilligung = {
 
 export type EigenesProfil = {
   name: string;
+  stadt: string;
   dialekt: string[];
   region: string | null;
   werte: string[];
@@ -65,6 +68,14 @@ export type Sichtbarkeit = {
 };
 
 type AppState = {
+  /** "echt" = mit Supabase verbunden, "demo" = Beispieldaten im Speicher */
+  modus: 'echt' | 'demo';
+  /** true, sobald beim Start geklaert ist, ob jemand angemeldet ist */
+  sitzungGeprueft: boolean;
+  angemeldet: boolean;
+  /** null = noch unbekannt; false = angemeldet, aber Onboarding fehlt noch */
+  profilVorhanden: boolean | null;
+
   einwilligung: Einwilligung;
   profil: EigenesProfil;
   sichtbarkeit: Sichtbarkeit;
@@ -93,6 +104,13 @@ type AppState = {
   /** Eigene Antwort auf die heutige Frage des Tages */
   tagesAntwort: string | null;
   setTagesAntwort: (text: string) => void;
+
+  /** Speichert das Onboarding-Ergebnis nach Supabase (nur im echten Modus) */
+  onboardingSpeichern: (zusatz: { name: string; geburtsdatum: string; stadt: string }) => Promise<void>;
+  /** Laedt das eigene Profil neu aus Supabase in den App-Zustand */
+  profilNeuLaden: () => Promise<void>;
+  abmelden: () => Promise<void>;
+  kontoEndgueltigLoeschen: () => Promise<void>;
 };
 
 /**
@@ -106,13 +124,18 @@ const ANTWORT_VERZOEGERUNG_MS = 45_000;
 
 const Context = createContext<AppState | null>(null);
 
+function modusVorab(): 'echt' | 'demo' {
+  return supabase ? 'echt' : 'demo';
+}
+
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [einwilligung, setEinwilligungState] = useState<Einwilligung>({
     alterBestaetigt: false,
     herkunftsdaten: false,
   });
   const [profil, setProfil] = useState<EigenesProfil>({
-    name: 'Berke',
+    name: modusVorab() === 'echt' ? '' : 'Berke',
+    stadt: '',
     dialekt: [],
     region: null,
     werte: [],
@@ -126,6 +149,67 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [neuerMatch, setNeuerMatch] = useState<Profil | null>(null);
   const [zusagen, setZusagen] = useState<string[]>([]);
   const [tagesAntwort, setTagesAntwortState] = useState<string | null>(null);
+
+  const modus: 'echt' | 'demo' = supabase ? 'echt' : 'demo';
+  const [sitzungGeprueft, setSitzungGeprueft] = useState(modus === 'demo');
+  const [angemeldet, setAngemeldet] = useState(false);
+  const [profilVorhanden, setProfilVorhanden] = useState<boolean | null>(modus === 'demo' ? false : null);
+
+  /** Uebernimmt ein geladenes Supabase-Profil in den App-Zustand. */
+  const uebernehmen = useCallback((geladen: konto.GeladenesProfil | null) => {
+    if (!geladen) {
+      setProfilVorhanden(false);
+      return;
+    }
+    setProfil({
+      name: geladen.name,
+      stadt: geladen.stadt,
+      dialekt: geladen.dialekt,
+      region: geladen.region,
+      werte: geladen.werte,
+      antworten: geladen.antworten,
+    });
+    setSichtbarkeitState({
+      herkunftImProfil: geladen.herkunftZeigen,
+      unsichtbarInMeinerStadt: geladen.unsichtbarInStadt,
+    });
+    setEinwilligungState({ alterBestaetigt: true, herkunftsdaten: geladen.herkunftsEinwilligung });
+    setProfilVorhanden(true);
+  }, []);
+
+  // Beim Start pruefen, ob schon jemand angemeldet ist, und auf An-/Abmelden reagieren.
+  useEffect(() => {
+    if (!supabase) return;
+    let aktiv = true;
+
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (!aktiv) return;
+      setAngemeldet(!!data.session);
+      if (data.session) {
+        try {
+          uebernehmen(await konto.profilLaden());
+        } catch {
+          setProfilVorhanden(false);
+        }
+      }
+      setSitzungGeprueft(true);
+    });
+
+    const { data: abo } = supabase.auth.onAuthStateChange((_ereignis, sitzung) => {
+      if (!aktiv) return;
+      setAngemeldet(!!sitzung);
+      if (!sitzung) {
+        setProfilVorhanden(null);
+        setProfil({ name: '', stadt: '', dialekt: [], region: null, werte: [], antworten: [] });
+        setEinwilligungState({ alterBestaetigt: false, herkunftsdaten: false });
+        setThreads([]);
+      }
+    });
+    return () => {
+      aktiv = false;
+      abo.subscription.unsubscribe();
+    };
+  }, [uebernehmen]);
 
   const setEinwilligung = useCallback((teil: Partial<Einwilligung>) => {
     setEinwilligungState((alt) => ({ ...alt, ...teil }));
@@ -149,6 +233,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const setSichtbarkeit = useCallback((teil: Partial<Sichtbarkeit>) => {
     setSichtbarkeitState((alt) => ({ ...alt, ...teil }));
+    if (supabase) {
+      konto
+        .sichtbarkeitSpeichern({
+          herkunftZeigen: teil.herkunftImProfil,
+          unsichtbarInStadt: teil.unsichtbarInMeinerStadt,
+        })
+        .catch(() => {});
+    }
   }, []);
 
   const setEigeneAntworten = useCallback((antworten: Prompt[]) => {
@@ -156,6 +248,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const herkunftsdatenLoeschen = useCallback(() => {
+    if (supabase) {
+      konto.herkunftLoeschen().catch(() => {});
+    }
     setProfil((alt) => ({ ...alt, dialekt: [], region: null, werte: [] }));
     setEinwilligungState((alt) => ({ ...alt, herkunftsdaten: false }));
     setSichtbarkeitState((alt) => ({ ...alt, herkunftImProfil: false }));
@@ -220,10 +315,46 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setTagesAntwortState(text.trim() || null);
   }, []);
 
+  const onboardingSpeichern = useCallback(
+    async (zusatz: { name: string; geburtsdatum: string; stadt: string }) => {
+      setProfil((alt) => ({ ...alt, name: zusatz.name, stadt: zusatz.stadt }));
+      if (!supabase) return; // Demo-Modus: nichts zu speichern
+      await konto.profilSpeichern({
+        name: zusatz.name,
+        geburtsdatum: zusatz.geburtsdatum,
+        stadt: zusatz.stadt,
+        herkunftsEinwilligung: einwilligung.herkunftsdaten,
+        dialekt: profil.dialekt,
+        region: profil.region,
+        werte: profil.werte,
+        antworten: profil.antworten,
+      });
+      setProfilVorhanden(true);
+    },
+    [einwilligung.herkunftsdaten, profil.dialekt, profil.region, profil.werte, profil.antworten],
+  );
+
+  const profilNeuLaden = useCallback(async () => {
+    if (!supabase) return;
+    uebernehmen(await konto.profilLaden());
+  }, [uebernehmen]);
+
+  const abmelden = useCallback(async () => {
+    if (supabase) await konto.abmelden();
+  }, []);
+
+  const kontoEndgueltigLoeschen = useCallback(async () => {
+    if (supabase) await konto.kontoLoeschen();
+  }, []);
+
   const ungeleseneAnzahl = threads.filter((t) => t.ungelesen).length;
 
   const wert = useMemo<AppState>(
     () => ({
+      modus,
+      sitzungGeprueft,
+      angemeldet,
+      profilVorhanden,
       einwilligung,
       profil,
       sichtbarkeit,
@@ -244,8 +375,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       toggleZusage,
       tagesAntwort,
       setTagesAntwort,
+      onboardingSpeichern,
+      profilNeuLaden,
+      abmelden,
+      kontoEndgueltigLoeschen,
     }),
     [
+      modus,
+      sitzungGeprueft,
+      angemeldet,
+      profilVorhanden,
       einwilligung,
       profil,
       sichtbarkeit,
@@ -266,6 +405,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       toggleZusage,
       tagesAntwort,
       setTagesAntwort,
+      onboardingSpeichern,
+      profilNeuLaden,
+      abmelden,
+      kontoEndgueltigLoeschen,
     ],
   );
 

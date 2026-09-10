@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Kilim } from '@/components/kilim';
 import { Button } from '@/components/ui';
+import { useApp } from '@/state/app-state';
 import { C, F, S } from '@/theme/tokens';
 
 /** Die drei Versprechen, die Hevpar von einer generischen App unterscheiden. */
@@ -21,6 +22,7 @@ const VERSPRECHEN = [
 
 export default function Willkommen() {
   const insets = useSafeAreaInsets();
+  const { modus, angemeldet, profilVorhanden, profil } = useApp();
 
   return (
     <ScrollView
@@ -52,13 +54,29 @@ export default function Willkommen() {
       </View>
 
       <View style={styles.aktionen}>
-        <Button full label="Profil anlegen" onPress={() => router.push('/onboarding')} />
-        <Button
-          full
-          variant="ghost"
-          label="Ich habe schon ein Profil"
-          onPress={() => router.push('/onboarding')}
-        />
+        {modus === 'echt' && angemeldet && profilVorhanden ? (
+          <Button full label={`Weiter als ${profil.name}`} onPress={() => router.push('/entdecken')} />
+        ) : modus === 'echt' ? (
+          <>
+            <Button full label="Profil anlegen" onPress={() => router.push('/konto?neu=1')} />
+            <Button
+              full
+              variant="ghost"
+              label="Ich habe schon ein Profil"
+              onPress={() => router.push('/konto')}
+            />
+          </>
+        ) : (
+          <>
+            <Button full label="Profil anlegen" onPress={() => router.push('/onboarding')} />
+            <Button
+              full
+              variant="ghost"
+              label="Ich habe schon ein Profil"
+              onPress={() => router.push('/onboarding')}
+            />
+          </>
+        )}
       </View>
     </ScrollView>
   );
