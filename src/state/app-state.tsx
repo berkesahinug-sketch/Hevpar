@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import type { Profil, Prompt } from '@/data/demo-profile';
+import { DEMO_PROFILE, type Profil, type Prompt } from '@/data/demo-profile';
+import * as begegnungen from '@/lib/begegnungen';
 import * as konto from '@/lib/konto';
 import { supabase } from '@/lib/supabase';
 
@@ -91,7 +92,16 @@ type AppState = {
   /** Löscht alle Art.-9-Daten und widerruft die Einwilligung. Konto bleibt. */
   herkunftsdatenLoeschen: () => void;
 
-  sendeSilav: (profil: Profil, prompt: Prompt, text: string) => void;
+  /** Die Profile im Entdecken-Tab (Demo-Daten oder echte, je nach Modus) */
+  entdeckenListe: Profil[];
+  entdeckenLaden: () => Promise<void>;
+  /** Liefert 'match' oder 'gesendet' (Silav raus, Gegenseite noch offen) */
+  sendeSilav: (profil: Profil, prompt: Prompt, text: string) => Promise<'match' | 'gesendet'>;
+  /** Eingegangene Silavs, auf die noch nicht geantwortet wurde (nur echt) */
+  silavEingang: begegnungen.EingehendesSilav[];
+  beantworteSilav: (eingang: begegnungen.EingehendesSilav, text: string) => Promise<void>;
+  /** Antworten der anderen auf die Tagesfrage (nur echt) */
+  tagesAndere: begegnungen.EchteTagesantwort[];
   antworte: (threadId: string, text: string) => void;
   alsGelesen: (threadId: string) => void;
   matchSchliessen: () => void;
@@ -149,11 +159,52 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [neuerMatch, setNeuerMatch] = useState<Profil | null>(null);
   const [zusagen, setZusagen] = useState<string[]>([]);
   const [tagesAntwort, setTagesAntwortState] = useState<string | null>(null);
+  const [entdeckenListe, setEntdeckenListe] = useState<Profil[]>(supabase ? [] : DEMO_PROFILE);
+  const [silavEingang, setSilavEingang] = useState<begegnungen.EingehendesSilav[]>([]);
+  const [tagesAndere, setTagesAndere] = useState<begegnungen.EchteTagesantwort[]>([]);
 
   const modus: 'echt' | 'demo' = supabase ? 'echt' : 'demo';
   const [sitzungGeprueft, setSitzungGeprueft] = useState(modus === 'demo');
   const [angemeldet, setAngemeldet] = useState(false);
   const [profilVorhanden, setProfilVorhanden] = useState<boolean | null>(modus === 'demo' ? false : null);
+
+  /** Lädt Threads und Silav-Eingang neu — die Live-Ereignisse rufen das auf. */
+  const begegnungenNeuLaden = useCallback(async () => {
+    if (!supabase) return;
+    try {
+      const [echteThreads, eingang] = await Promise.all([
+        begegnungen.threadsLaden(),
+        begegnungen.silavEingangLaden(),
+      ]);
+      setThreads(
+        echteThreads.map((t) => ({
+          id: String(t.matchId),
+          name: t.gegenueber.name,
+          stadt: t.gegenueber.stadt,
+          verifiziert: true,
+          kontext: t.kontext,
+          nachrichten: t.nachrichten,
+          ungelesen: t.ungelesen,
+          fotosFrei: true,
+        })),
+      );
+      setSilavEingang(eingang);
+    } catch {
+      // Netzfehler beim Hintergrund-Laden: alter Stand bleibt stehen
+    }
+  }, []);
+
+  const entdeckenLaden = useCallback(async () => {
+    if (!supabase) {
+      setEntdeckenListe([...DEMO_PROFILE].sort(() => Math.random() - 0.5));
+      return;
+    }
+    try {
+      setEntdeckenListe(await begegnungen.entdeckenLaden());
+    } catch {
+      // Alter Stand bleibt stehen
+    }
+  }, []);
 
   /** Uebernimmt ein geladenes Supabase-Profil in den App-Zustand. */
   const uebernehmen = useCallback((geladen: konto.GeladenesProfil | null) => {
@@ -176,6 +227,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setEinwilligungState({ alterBestaetigt: true, herkunftsdaten: geladen.herkunftsEinwilligung });
     setProfilVorhanden(true);
   }, []);
+
+  // Sobald ein Profil da ist: Entdecken, Threads und Eingang laden, dann
+  // live auf neue Nachrichten, Silavs und Matches lauschen.
+  useEffect(() => {
+    if (!supabase || !profilVorhanden) return;
+    entdeckenLaden();
+    begegnungenNeuLaden();
+    const abbestellen = begegnungen.liveAbo(() => {
+      begegnungenNeuLaden();
+    });
+    return abbestellen;
+  }, [profilVorhanden, entdeckenLaden, begegnungenNeuLaden]);
 
   // Beim Start pruefen, ob schon jemand angemeldet ist, und auf An-/Abmelden reagieren.
   useEffect(() => {
@@ -256,7 +319,24 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setSichtbarkeitState((alt) => ({ ...alt, herkunftImProfil: false }));
   }, []);
 
-  const sendeSilav = useCallback((ziel: Profil, prompt: Prompt, text: string) => {
+  const sendeSilav = useCallback(
+    async (ziel: Profil, prompt: Prompt, text: string): Promise<'match' | 'gesendet'> => {
+      if (supabase) {
+        const match = await begegnungen.silavSenden(ziel.id, prompt.frage, prompt.antwort, text);
+        await begegnungenNeuLaden();
+        if (match) {
+          setNeuerMatch(ziel);
+          return 'match';
+        }
+        return 'gesendet';
+      }
+      sendeSilavDemo(ziel, prompt, text);
+      return 'match';
+    },
+    [begegnungenNeuLaden],
+  );
+
+  const sendeSilavDemo = useCallback((ziel: Profil, prompt: Prompt, text: string) => {
     setThreads((alt) => [
       {
         id: ziel.id,
@@ -289,18 +369,43 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }, ANTWORT_VERZOEGERUNG_MS);
   }, []);
 
+  const beantworteSilav = useCallback(
+    async (eingang: begegnungen.EingehendesSilav, text: string) => {
+      // Antwort auf ein Silav ist selbst ein Silav - die Gegenrichtung
+      // existiert schon, also entsteht dabei sicher das Match.
+      await begegnungen.silavSenden(eingang.von, eingang.frage, eingang.zitat, text);
+      await begegnungenNeuLaden();
+      setNeuerMatch({
+        id: eingang.von,
+        name: eingang.name,
+        alter: 0,
+        stadt: eingang.stadt,
+        verifiziert: true,
+        chips: [],
+        prompts: [],
+      });
+    },
+    [begegnungenNeuLaden],
+  );
+
   const antworte = useCallback((threadId: string, text: string) => {
     setThreads((alt) =>
       alt.map((t) =>
         t.id === threadId ? { ...t, nachrichten: [...t.nachrichten, { vonMir: true, text }] } : t,
       ),
     );
+    if (supabase) {
+      begegnungen.nachrichtSenden(Number(threadId), text).catch(() => {});
+    }
   }, []);
 
   const alsGelesen = useCallback((threadId: string) => {
     setThreads((alt) =>
       alt.map((t) => (t.id === threadId && t.ungelesen ? { ...t, ungelesen: false } : t)),
     );
+    if (supabase) {
+      begegnungen.gelesenMarkieren(Number(threadId)).catch(() => {});
+    }
   }, []);
 
   const matchSchliessen = useCallback(() => setNeuerMatch(null), []);
@@ -312,7 +417,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setTagesAntwort = useCallback((text: string) => {
-    setTagesAntwortState(text.trim() || null);
+    const sauber = text.trim() || null;
+    setTagesAntwortState(sauber);
+    if (supabase && sauber) {
+      begegnungen
+        .tagesantwortSenden(sauber)
+        .then(() => begegnungen.tagesantwortenLaden())
+        .then(setTagesAndere)
+        .catch(() => {});
+    }
   }, []);
 
   const onboardingSpeichern = useCallback(
@@ -360,6 +473,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       sichtbarkeit,
       threads,
       neuerMatch,
+      entdeckenListe,
+      entdeckenLaden,
+      silavEingang,
+      beantworteSilav,
+      tagesAndere,
       setEinwilligung,
       toggleAuswahl,
       setRegion,
@@ -390,6 +508,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       sichtbarkeit,
       threads,
       neuerMatch,
+      entdeckenListe,
+      entdeckenLaden,
+      silavEingang,
+      beantworteSilav,
+      tagesAndere,
       setEinwilligung,
       toggleAuswahl,
       setRegion,

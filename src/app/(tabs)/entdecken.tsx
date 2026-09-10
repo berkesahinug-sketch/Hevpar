@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Erscheinen } from '@/components/erscheinen';
@@ -9,38 +9,44 @@ import { Tageskarte } from '@/components/tageskarte';
 import { ProfileCard } from '@/components/profile-card';
 import { SilavSheet } from '@/components/silav-sheet';
 import { Chip, TextLink } from '@/components/ui';
-import { DEMO_PROFILE, FILTER, type Profil, type Prompt } from '@/data/demo-profile';
+import { FILTER, type Profil, type Prompt } from '@/data/demo-profile';
 import { impuls } from '@/lib/haptik';
 import { useApp } from '@/state/app-state';
 import { C, F, S } from '@/theme/tokens';
 
 export default function Entdecken() {
   const insets = useSafeAreaInsets();
-  const { sendeSilav, neuerMatch, matchSchliessen } = useApp();
+  const { sendeSilav, neuerMatch, matchSchliessen, entdeckenListe, entdeckenLaden } = useApp();
 
   const [filterOffen, setFilterOffen] = useState(false);
   const [filter, setFilter] = useState<string | null>(null);
   const [silavZiel, setSilavZiel] = useState<{ profil: Profil; prompt: Prompt } | null>(null);
-  const [profile, setProfile] = useState(DEMO_PROFILE);
   const [ladeNeu, setLadeNeu] = useState(false);
 
-  const liste = filter ? profile.filter((p) => p.chips.includes(filter)) : profile;
+  const liste = filter ? entdeckenListe.filter((p) => p.chips.includes(filter)) : entdeckenListe;
 
-  // Ziehen zum Aktualisieren. Mit echten Daten holt das neue Profile aus
-  // Supabase; in der Demo mischt es die Reihenfolge.
-  const aktualisieren = useCallback(() => {
+  const aktualisieren = useCallback(async () => {
     setLadeNeu(true);
-    setTimeout(() => {
-      setProfile((alt) => [...alt].sort(() => Math.random() - 0.5));
-      setLadeNeu(false);
-    }, 600);
-  }, []);
+    await entdeckenLaden();
+    setLadeNeu(false);
+  }, [entdeckenLaden]);
 
-  const silavSenden = (text: string) => {
+  const silavSenden = async (text: string) => {
     if (!silavZiel) return;
-    impuls();
-    sendeSilav(silavZiel.profil, silavZiel.prompt, text);
+    const ziel = silavZiel;
     setSilavZiel(null);
+    impuls();
+    try {
+      const ergebnis = await sendeSilav(ziel.profil, ziel.prompt, text);
+      if (ergebnis === 'gesendet') {
+        Alert.alert(
+          'Silav ist raus',
+          `Wenn ${ziel.profil.name} auf eine deiner Antworten antwortet, entsteht ein Match — und ihr könnt schreiben.`,
+        );
+      }
+    } catch (e) {
+      Alert.alert('Das hat nicht geklappt', e instanceof Error ? e.message : 'Unbekannter Fehler.');
+    }
   };
 
   return (

@@ -17,10 +17,26 @@ import { C, F, RADIUS, S } from '@/theme/tokens';
  * Silav schicken. Zuschauen ohne mitzuspielen gibt es nicht.
  */
 export function Tageskarte({ onSilav }: { onSilav: (p: Profil, prompt: Prompt) => void }) {
-  const { profil, tagesAntwort, setTagesAntwort } = useApp();
+  const { profil, tagesAntwort, setTagesAntwort, modus, tagesAndere } = useApp();
   const woerter = woerterFuer(profil.dialekt);
   const frage = heutigeFrage();
   const [text, setText] = useState('');
+
+  // Woher die Antworten der anderen kommen: im echten Modus aus der
+  // Datenbank (die sie erst nach der eigenen Antwort herausgibt), in der
+  // Demo aus den Beispieldaten.
+  const andere =
+    modus === 'echt'
+      ? tagesAndere.map((t) => ({
+          profilId: t.profilId,
+          name: t.name,
+          stadt: t.stadt,
+          text: t.text,
+        }))
+      : frage.antworten.map((a) => {
+          const p = DEMO_PROFILE.find((x) => x.id === a.profilId);
+          return { profilId: a.profilId, name: p?.name ?? '', stadt: p?.stadt ?? '', text: a.text };
+        });
 
   const abgeben = () => {
     const sauber = text.trim();
@@ -59,30 +75,45 @@ export function Tageskarte({ onSilav }: { onSilav: (p: Profil, prompt: Prompt) =
             <Text style={styles.meineWer}>Deine Antwort</Text>
           </View>
 
-          {frage.antworten.map((a, i) => {
-            const p = DEMO_PROFILE.find((x) => x.id === a.profilId);
-            if (!p) return null;
-            return (
-              <Erscheinen key={a.profilId} index={i}>
-                <View style={styles.andere}>
-                  <WovenAvatar seed={p.id} size={40} radius={10} />
-                  <View style={styles.andereText}>
-                    <Text style={styles.andereWer}>
-                      {p.name}, {p.stadt}
-                    </Text>
-                    <Text style={styles.andereAntwort}>{a.text}</Text>
-                    <View style={styles.silav}>
-                      <Button
-                        variant="ghost"
-                        label={`${woerter.silav} auf diese Antwort`}
-                        onPress={() => onSilav(p, { frage: frage.frage, antwort: a.text })}
-                      />
-                    </View>
+          {andere.length === 0 && modus === 'echt' ? (
+            <Text style={styles.leer}>
+              Noch hat heute niemand sonst geantwortet. Schau später wieder rein.
+            </Text>
+          ) : null}
+          {andere.map((a, i) => (
+            <Erscheinen key={a.profilId} index={i}>
+              <View style={styles.andere}>
+                <WovenAvatar seed={a.profilId} size={40} radius={10} />
+                <View style={styles.andereText}>
+                  <Text style={styles.andereWer}>
+                    {a.name}
+                    {a.stadt ? `, ${a.stadt}` : ''}
+                  </Text>
+                  <Text style={styles.andereAntwort}>{a.text}</Text>
+                  <View style={styles.silav}>
+                    <Button
+                      variant="ghost"
+                      label={`${woerter.silav} auf diese Antwort`}
+                      onPress={() =>
+                        onSilav(
+                          {
+                            id: a.profilId,
+                            name: a.name,
+                            alter: 0,
+                            stadt: a.stadt,
+                            verifiziert: true,
+                            chips: [],
+                            prompts: [],
+                          },
+                          { frage: frage.frage, antwort: a.text },
+                        )
+                      }
+                    />
                   </View>
                 </View>
-              </Erscheinen>
-            );
-          })}
+              </View>
+            </Erscheinen>
+          ))}
         </View>
       )}
     </View>
@@ -127,4 +158,5 @@ const styles = StyleSheet.create({
   andereWer: { fontFamily: F.sansMedium, fontSize: 12.5, color: C.muted },
   andereAntwort: { fontFamily: F.serif, fontSize: 15.5, lineHeight: 22, color: C.ink, marginTop: 3 },
   silav: { marginTop: 8, alignSelf: 'flex-start' },
+  leer: { fontFamily: F.sans, fontSize: 13, lineHeight: 20, color: C.muted },
 });

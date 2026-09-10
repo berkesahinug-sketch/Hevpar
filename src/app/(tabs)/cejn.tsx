@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -8,6 +8,7 @@ import { Kilim } from '@/components/kilim';
 import { Button, Chip, Eyebrow } from '@/components/ui';
 import { WovenAvatar } from '@/components/woven-avatar';
 import { datumKurz, istHeute, EVENTS, type CommunityEvent } from '@/data/events';
+import * as begegnungen from '@/lib/begegnungen';
 import { woerterFuer } from '@/data/sprache';
 import { impuls, tick } from '@/lib/haptik';
 import { useApp } from '@/state/app-state';
@@ -24,13 +25,44 @@ import { C, F, RADIUS, S } from '@/theme/tokens';
  */
 export default function Cejn() {
   const insets = useSafeAreaInsets();
-  const { profil, threads, zusagen, toggleZusage, antworte } = useApp();
+  const { profil, threads, zusagen, toggleZusage, antworte, modus } = useApp();
   const woerter = woerterFuer(profil.dialekt);
 
   const [einladungFuer, setEinladungFuer] = useState<CommunityEvent | null>(null);
+  const [echteEvents, setEchteEvents] = useState<CommunityEvent[] | null>(null);
 
-  const heute = EVENTS.filter((e) => istHeute(e.datum));
-  const sortiert = [...EVENTS].sort((a, b) => a.datum.getTime() - b.datum.getTime());
+  // Im echten Modus kommen die Events aus der Datenbank; die Zusagen-Zahl
+  // liefert die Datenbank, die eigene Zusage steckt in "zusagen".
+  useEffect(() => {
+    if (modus !== 'echt') return;
+    begegnungen
+      .eventsLaden()
+      .then((geladen) => {
+        setEchteEvents(
+          geladen.map((e) => ({
+            id: String(e.id),
+            titel: e.titel,
+            untertitel: e.untertitel,
+            stadt: e.stadt,
+            ort: e.ort,
+            datum: e.datum,
+            typ: e.typ as CommunityEvent['typ'],
+            zusagenBasis: e.zusagen - (e.zugesagt ? 1 : 0),
+          })),
+        );
+        for (const e of geladen) {
+          if (e.zugesagt && !zusagen.includes(String(e.id))) toggleZusage(String(e.id));
+        }
+      })
+      .catch(() => setEchteEvents([]));
+    // zusagen/toggleZusage absichtlich nicht als Abhängigkeit: nur der
+    // erste Abgleich nach dem Laden soll den lokalen Stand setzen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modus]);
+
+  const quelle = modus === 'echt' ? (echteEvents ?? []) : EVENTS;
+  const heute = quelle.filter((e) => istHeute(e.datum));
+  const sortiert = [...quelle].sort((a, b) => a.datum.getTime() - b.datum.getTime());
 
   const einladen = (event: CommunityEvent) => {
     if (threads.length === 0) {
@@ -79,6 +111,13 @@ export default function Cejn() {
           </Erscheinen>
         ) : null}
 
+        {modus === 'echt' && echteEvents !== null && echteEvents.length === 0 ? (
+          <Text style={styles.hinweisUnten}>
+            Gerade steht hier nichts an. Die ersten Events kommen über Vereine und
+            Kulturzentren — schreib uns, wenn du eines kennst.
+          </Text>
+        ) : null}
+
         <View style={styles.liste}>
           {sortiert.map((event, i) => {
             const zugesagt = zusagen.includes(event.id);
@@ -111,6 +150,11 @@ export default function Cejn() {
                         onPress={() => {
                           tick();
                           toggleZusage(event.id);
+                          if (modus === 'echt') {
+                            begegnungen
+                              .zusageToggle(Number(event.id), !zugesagt)
+                              .catch(() => toggleZusage(event.id));
+                          }
                         }}
                       />
                     </View>

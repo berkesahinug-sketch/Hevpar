@@ -178,6 +178,18 @@ exception when insufficient_privilege then
   raise notice 'T11b PASS: kein Silav trotz Blockierung';
 end $$;
 
+-- ===== T13: Geburtsdatum ist privat, das Alter nicht =====
+select als('bbbbbbbb-0000-0000-0000-000000000002');
+do $$ begin
+  perform geburtsdatum from public.profile where id = auth.uid();
+  raise notice 'T13 FAIL: Geburtsdatum ist lesbar';
+exception when insufficient_privilege then
+  raise notice 'T13 PASS: Geburtsdatum ist fuer niemanden lesbar';
+end $$;
+select case when jahre between 18 and 120 then 'T13b PASS: das Alter (jahre) ist lesbar und plausibel: ' || jahre
+            else 'T13b FAIL' end
+from public.profile where id = auth.uid();
+
 -- ===== T12: Konto loeschen raeumt alles ab =====
 select als('cccccccc-0000-0000-0000-000000000003');
 select public.konto_loeschen();
